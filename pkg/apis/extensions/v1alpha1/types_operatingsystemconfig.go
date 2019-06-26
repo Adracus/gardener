@@ -35,9 +35,14 @@ type OperatingSystemConfig struct {
 	Status OperatingSystemConfigStatus `json:"status"`
 }
 
-// GetExtensionType returns the type of this OperatingSystemConfig resource.
-func (o *OperatingSystemConfig) GetExtensionType() string {
-	return o.Spec.Type
+// GetExtensionSpec implements Object.
+func (o *OperatingSystemConfig) GetExtensionSpec() Spec {
+	return &o.Spec
+}
+
+// GetExtensionStatus implements Object.
+func (o *OperatingSystemConfig) GetExtensionStatus() Status {
+	return &o.Status
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object

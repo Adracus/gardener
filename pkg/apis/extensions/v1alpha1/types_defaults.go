@@ -22,6 +22,10 @@ type DefaultSpec struct {
 	Type string `json:"type"`
 }
 
+func (d *DefaultSpec) GetExtensionType() string {
+	return d.Type
+}
+
 // DefaultStatus contains common status fields for every extension resource.
 type DefaultStatus struct {
 	// Conditions represents the latest available observations of a Seed's current state.
@@ -37,4 +41,8 @@ type DefaultStatus struct {
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 	// State can be filled by the operating controller with what ever data it needs.
 	State string `json:"state,omitempty"`
+}
+
+func (d *DefaultStatus) GetLastOperation() LastOperation {
+	return d.LastOperation
 }

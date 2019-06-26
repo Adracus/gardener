@@ -32,6 +32,16 @@ type Network struct {
 	Status NetworkStatus `json:"status"`
 }
 
+// GetExtensionSpec implements Object.
+func (i *Network) GetExtensionSpec() Spec {
+	return &i.Spec
+}
+
+// GetExtensionStatus implements Object.
+func (i *Network) GetExtensionStatus() Status {
+	return &i.Status
+}
+
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
 
 // NetworkList is a list of Network resources.

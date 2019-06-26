@@ -34,9 +34,14 @@ type Worker struct {
 	Status WorkerStatus `json:"status"`
 }
 
-// GetExtensionType returns the type of this Worker resource.
-func (w *Worker) GetExtensionType() string {
-	return w.Spec.Type
+// GetExtensionSpec implements Object.
+func (i *Worker) GetExtensionSpec() Spec {
+	return &i.Spec
+}
+
+// GetExtensionStatus implements Object.
+func (i *Worker) GetExtensionStatus() Status {
+	return &i.Status
 }
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
