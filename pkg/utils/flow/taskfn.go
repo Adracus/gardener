@@ -208,62 +208,120 @@ func ParallelExitOnError(fns ...TaskFn) TaskFn {
 
 // Submitter is an interface to run functions in parallel.
 type Submitter interface {
+	// Submit runs the given function asynchronously. This function should not block
+	// during the execution of f.
 	Submit(f func())
 }
 
-// LimitSubmitter containts information about the pool size which is used
+func workQueue() (chan<- func(), <-chan func()) {
+	var (
+		out   = make(chan func())
+		in    = make(chan func())
+		queue []func()
+		exit  bool
+	)
+
+	go func() {
+		defer close(out)
+		for len(queue) != 0 || !exit {
+			if len(queue) == 0 {
+				f, ok := <-in
+				if !ok {
+					exit = true
+					continue
+				}
+
+				queue = append(queue, f)
+				continue
+			}
+
+			select {
+			case f, ok := <-in:
+				if !ok {
+					exit = true
+					continue
+				}
+
+				queue = append(queue, f)
+			case out <- queue[0]:
+				queue = queue[1:]
+			}
+		}
+	}()
+
+	return in, out
+}
+
+// LimitSubmitter contains information about the pool size which is used
 // to limit the submission of functions in parallel.
 type LimitSubmitter struct {
 	submitter Submitter
-	work      chan func()
-	done      chan struct{}
-	exit      <-chan struct{}
+	in        chan<- func()
 	size      int
-	current   int
+	running   bool
 }
 
-// Submit implements Submitter.Submit
-func (s *LimitSubmitter) Submit(f func()) {
-	s.work <- f
-}
+func (l *LimitSubmitter) run(work <-chan func()) {
+	var (
+		exit bool
+		done = make(chan struct{})
+		ct   int
+	)
+	defer close(done)
 
-func (s *LimitSubmitter) run() {
-	for {
-		if s.current < s.size {
-			select {
-			case w := <-s.work:
-				s.current++
-				s.submitter.Submit(func() {
+	for ct > 0 || !exit {
+		if ct < l.size {
+			w, ok := <-work
+			if !ok {
+				exit = true
+				continue
+			}
+
+			if !exit {
+				ct++
+				l.submitter.Submit(func() {
 					w()
-					s.done <- struct{}{}
+					done <- struct{}{}
 				})
-			case <-s.done:
-				s.current--
-			case <-s.exit:
-				return
 			}
 			continue
 		}
 
-		select {
-		case <-s.done:
-			s.current--
-		case <-s.exit:
-			return
-		}
+		<-done
+		ct--
 	}
 }
 
+func (l *LimitSubmitter) Start() {
+	if !l.running {
+		l.running = true
+		in, out := workQueue()
+		go l.run(out)
+		l.in = in
+	}
+}
+
+func (l *LimitSubmitter) Stop() {
+	if l.running {
+		l.running = false
+		close(l.in)
+		l.in = nil
+	}
+}
+
+func (l *LimitSubmitter) Submit(f func()) {
+	if !l.running {
+		panic("cannot submit on non-running LimitSubmitter")
+	}
+	l.in <- f
+}
+
 // NewLimitSubmitter returns a new instance of a LimitSubmitter and a submit pool that has the given size.
-func NewLimitSubmitter(ctx context.Context, submitter Submitter, size int) *LimitSubmitter {
+func NewLimitSubmitter(submitter Submitter, size int) *LimitSubmitter {
 	s := &LimitSubmitter{
-		exit:      ctx.Done(),
 		submitter: submitter,
 		size:      size,
-		work:      make(chan func()),
-		done:      make(chan struct{}),
 	}
-	go s.run()
 	return s
 }
 

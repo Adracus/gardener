@@ -128,12 +128,12 @@ func (c *Controller) runReconcileShootFlow(o *operation.Operation, operationType
 		})
 		deployInfrastructure = g.Add(flow.Task{
 			Name:         "Deploying Shoot infrastructure",
-			Fn:           flow.TaskFn(botanist.DeployInfrastructure).RetryUntilTimeout(defaultInterval, defaultTimeout),
+			Fn:           flow.TaskFn(botanist.DeployInfrastructure).RetryUntilTimeout(defaultInterval, defaultTimeout).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deploySecrets, deployCloudProviderSecret),
 		})
 		waitUntilInfrastructureReady = g.Add(flow.Task{
 			Name:         "Waiting until shoot infrastructure has been reconciled",
-			Fn:           flow.TaskFn(botanist.WaitUntilInfrastructureReady),
+			Fn:           flow.TaskFn(botanist.WaitUntilInfrastructureReady).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deployInfrastructure),
 		})
 		deployBackupInfrastructure = g.Add(flow.Task{
@@ -157,12 +157,12 @@ func (c *Controller) runReconcileShootFlow(o *operation.Operation, operationType
 		})
 		deployControlPlane = g.Add(flow.Task{
 			Name:         "Deploying shoot control plane components",
-			Fn:           flow.TaskFn(botanist.DeployControlPlane).RetryUntilTimeout(defaultInterval, defaultTimeout),
+			Fn:           flow.TaskFn(botanist.DeployControlPlane).RetryUntilTimeout(defaultInterval, defaultTimeout).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deploySecrets, deployCloudProviderSecret, waitUntilInfrastructureReady),
 		})
 		waitUntilControlPlaneReady = g.Add(flow.Task{
 			Name:         "Waiting until shoot control plane has been reconciled",
-			Fn:           flow.TaskFn(botanist.WaitUntilControlPlaneReady),
+			Fn:           flow.TaskFn(botanist.WaitUntilControlPlaneReady).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deployControlPlane),
 		})
 		createOrUpdateEtcdEncryptionConfiguration = g.Add(flow.Task{
@@ -172,12 +172,12 @@ func (c *Controller) runReconcileShootFlow(o *operation.Operation, operationType
 		})
 		deployKubeAPIServer = g.Add(flow.Task{
 			Name:         "Deploying Kubernetes API server",
-			Fn:           flow.SimpleTaskFn(hybridBotanist.DeployKubeAPIServer).RetryUntilTimeout(defaultInterval, defaultTimeout),
+			Fn:           flow.SimpleTaskFn(hybridBotanist.DeployKubeAPIServer).RetryUntilTimeout(defaultInterval, defaultTimeout).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deploySecrets, deployETCD, waitUntilEtcdReady, waitUntilKubeAPIServerServiceIsReady, waitUntilControlPlaneReady, createOrUpdateEtcdEncryptionConfiguration),
 		})
 		waitUntilKubeAPIServerIsReady = g.Add(flow.Task{
 			Name:         "Waiting until Kubernetes API server reports readiness",
-			Fn:           flow.TaskFn(botanist.WaitUntilKubeAPIServerReady).SkipIf(o.Shoot.HibernationEnabled),
+			Fn:           flow.TaskFn(botanist.WaitUntilKubeAPIServerReady).SkipIf(o.Shoot.HibernationEnabled).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deployKubeAPIServer),
 		})
 		deployControlPlaneExposure = g.Add(flow.Task{
@@ -242,12 +242,12 @@ func (c *Controller) runReconcileShootFlow(o *operation.Operation, operationType
 		})
 		deployWorker = g.Add(flow.Task{
 			Name:         "Configuring shoot worker pools",
-			Fn:           flow.TaskFn(botanist.DeployWorker).RetryUntilTimeout(defaultInterval, defaultTimeout),
+			Fn:           flow.TaskFn(botanist.DeployWorker).RetryUntilTimeout(defaultInterval, defaultTimeout).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deployCloudProviderSecret, waitUntilInfrastructureReady, initializeShootClients, computeShootOSConfig),
 		})
 		waitUntilWorkerReady = g.Add(flow.Task{
 			Name:         "Waiting until shoot worker nodes have been reconciled",
-			Fn:           flow.TaskFn(botanist.WaitUntilWorkerReady),
+			Fn:           flow.TaskFn(botanist.WaitUntilWorkerReady).SkipIf(true),
 			Dependencies: flow.NewTaskIDs(deployWorker),
 		})
 		// kube2iam is deprecated and is kept here only for backwards compatibility reasons because some end-users may depend
