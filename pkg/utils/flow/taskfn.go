@@ -136,8 +136,8 @@ func Sequential(fns ...TaskFn) TaskFn {
 	}
 }
 
-// Parallel runs the given TaskFns in parallel, collecting their errors in a multierror.
-func Parallel(fns ...TaskFn) TaskFn {
+// ParallelWithSubmitter runs the given TaskFns in parallel with the given Submitter, collecting their errors in a multierror.
+func ParallelWithSubmitter(s Submitter, fns ...TaskFn) TaskFn {
 	return func(ctx context.Context) error {
 		var (
 			wg     sync.WaitGroup
@@ -148,10 +148,10 @@ func Parallel(fns ...TaskFn) TaskFn {
 		for _, fn := range fns {
 			t := fn
 			wg.Add(1)
-			go func() {
+			s.Submit(func() {
 				defer wg.Done()
 				errors <- t(ctx)
-			}()
+			})
 		}
 
 		go func() {
@@ -166,6 +166,11 @@ func Parallel(fns ...TaskFn) TaskFn {
 		}
 		return result
 	}
+}
+
+// Parallel runs the given TaskFns in parallel, collecting their errors in a multierror.
+func Parallel(fns ...TaskFn) TaskFn {
+	return ParallelWithSubmitter(UnlimitedSubmitter, fns...)
 }
 
 // ParallelExitOnError runs the given TaskFns in parallel and stops execution as soon as one TaskFn returns an error.
@@ -200,3 +205,74 @@ func ParallelExitOnError(fns ...TaskFn) TaskFn {
 		return nil
 	}
 }
+
+// Submitter is an interface to run functions in parallel.
+type Submitter interface {
+	Submit(f func())
+}
+
+// LimitSubmitter containts information about the pool size which is used
+// to limit the submission of functions in parallel.
+type LimitSubmitter struct {
+	submitter Submitter
+	work      chan func()
+	done      chan struct{}
+	exit      <-chan struct{}
+	size      int
+	current   int
+}
+
+// Submit implements Submitter.Submit
+func (s *LimitSubmitter) Submit(f func()) {
+	s.work <- f
+}
+
+func (s *LimitSubmitter) run() {
+	for {
+		if s.current < s.size {
+			select {
+			case w := <-s.work:
+				s.current++
+				s.submitter.Submit(func() {
+					w()
+					s.done <- struct{}{}
+				})
+			case <-s.done:
+				s.current--
+			case <-s.exit:
+				return
+			}
+			continue
+		}
+
+		select {
+		case <-s.done:
+			s.current--
+		case <-s.exit:
+			return
+		}
+	}
+}
+
+// NewLimitSubmitter returns a new instance of a LimitSubmitter and a submit pool that has the given size.
+func NewLimitSubmitter(ctx context.Context, submitter Submitter, size int) *LimitSubmitter {
+	s := &LimitSubmitter{
+		exit:      ctx.Done(),
+		submitter: submitter,
+		size:      size,
+		work:      make(chan func()),
+		done:      make(chan struct{}),
+	}
+	go s.run()
+	return s
+}
+
+type unlimitedSubmitter struct{}
+
+// Submit implements Submitter.Submit
+func (unlimitedSubmitter) Submit(f func()) {
+	go f()
+}
+
+// UnlimitedSubmitter is a submitter with an unlimited pool to submit functions.
+var UnlimitedSubmitter = unlimitedSubmitter{}

@@ -25,6 +25,7 @@ import (
 
 	"errors"
 	"sync"
+	"sync/atomic"
 	"testing"
 
 	"github.com/gardener/gardener/pkg/utils/flow"
@@ -246,6 +247,39 @@ var _ = Describe("Flow", func() {
 			Expect(err).To(HaveOccurred())
 			Expect(err).To(BeAssignableToTypeOf(&multierror.Error{}))
 			Expect(err.(*multierror.Error).Errors).To(ConsistOf(err1, err2))
+		})
+	})
+
+	Context("LimitSubmitter", func() {
+		Describe("#Submit", func() {
+			It("should not run more functions than the given amount simultaneously", func() {
+				var i = int32(0)
+
+				var wg sync.WaitGroup
+				w1 := func() {
+					defer GinkgoRecover()
+					if !atomic.CompareAndSwapInt32(&i, 0, 1) {
+						Fail("w1 did not run first")
+					}
+				}
+
+				w2 := func() {
+					defer GinkgoRecover()
+					if !atomic.CompareAndSwapInt32(&i, 1, 2) {
+						Fail("w2 did not run after w1")
+					}
+				}
+
+				ctx, cancel := context.WithCancel(context.TODO())
+				defer cancel()
+
+				ls := flow.NewLimitSubmitter(ctx, flow.UnlimitedSubmitter, 1)
+
+				ls.Submit(w1)
+				ls.Submit(w2)
+
+				wg.Wait()
+			})
 		})
 	})
 })
